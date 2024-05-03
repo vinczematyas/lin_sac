@@ -172,6 +172,7 @@ def train_sac(cfg, sac, sac_idx):
 
 
 if __name__ == "__main__":
+    import os
     import argparse
     import logging
     import gymnasium as gym
@@ -195,6 +196,8 @@ if __name__ == "__main__":
     if cfg.log.wandb == True:
         wandb.init(project="sac", name=new_args["run_name"])
     if cfg.log.log_local == True:
+        if not os.path.exists(cfg.log.log_dir):
+            os.makedirs(cfg.log.log_dir)
         logging.basicConfig(filename=f"{cfg.log.log_dir}/{new_args['run_name']}.log", level=logging.INFO, format="%(message)s")
 
     n_envs = 1
