@@ -1,0 +1,26 @@
+#run args
+seed: 420
+env_id: Walker2d-v4
+device: cpu
+# logging args
+log:
+  wandb: False
+  log_local: False
+  log_dir: logs
+  model_dir: models
+# sac args
+sac:
+  n_sacs: 6  # env action dim
+  buffer_size: 1_000_000
+  gamma: 0.99  # discount factor
+  tau: 0.005  # target smoothing coefficient
+  batch_size: 256
+  policy_lr: 0.0003
+  q_lr: 0.001
+  policy_frequency: 2  # frequency of the policy training (delayed)
+  target_network_frequency: 1
+  alpha: 0.2
+  alpha_auto: True  # auto-tune alpha
+# counters
+counter:
+  sac_log_idx: 0
