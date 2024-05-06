@@ -204,7 +204,7 @@ if __name__ == "__main__":
     envs = gym.vector.AsyncVectorEnv(
         [lambda: gym.wrappers.RecordEpisodeStatistics(gym.make(cfg.env_id,)) for _ in range(n_envs)]
     )
-    envs_2 = gym.vector.AsyncVectorEnv(
+    envs_s = gym.vector.AsyncVectorEnv(
         [lambda: gym.wrappers.RecordEpisodeStatistics(gym.make(cfg.env_id,)) for _ in range(n_envs)]
     )
 
@@ -212,7 +212,7 @@ if __name__ == "__main__":
     sac_teacher = setup_sac(envs, cfg, actor_depth=2)
 
     obs, _ = envs.reset(seed=cfg.seed)
-    obs_2, _ = envs_2.reset(seed=cfg.seed)
+    obs_s, _ = envs_s.reset(seed=cfg.seed)
 
     for step_idx in trange(new_args["n_steps"]):
         actions = sac_teacher.actor.get_action(torch.tensor(obs, dtype=torch.float32).to(cfg.device))
@@ -220,20 +220,27 @@ if __name__ == "__main__":
 
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
 
-        actions_2 = sac_student.actor.get_action(torch.tensor(obs_2, dtype=torch.float32).to(cfg.device))
-        actions_2 = actions_2[0].cpu().detach().numpy()
-        next_obs_2, rewards_2, terminations_2, truncations_2, infos_2 = envs_2.step(actions_2)
+        actions_s = sac_student.actor.get_action(torch.tensor(obs_s, dtype=torch.float32).to(cfg.device))
+        actions_s = actions_s[0].cpu().detach().numpy()
+        next_obs_s, rewards_s, terminations_s, truncations_s, infos_s = envs_s.step(actions_s)
 
-        if "final_info" in infos_2:
-            for info in infos_2["final_info"]:
+        if "final_info" in infos:
+            for info in infos["final_info"]:
                 if info:
                     if cfg.log.wandb == True:
                         wandb.log({
                             f"sac/episodic_rew": info['episode']['r'],
                             f"sac/log_idx": step_idx,
                         })
-                    if cfg.log.log_local == True:
-                        logging.info(f"{step_idx}, {info['episode']['r'][0]}")
+
+        if "final_info" in infos_s:
+            for info in infos_s["final_info"]:
+                if info:
+                    if cfg.log.wandb == True:
+                        wandb.log({
+                            f"sac/episodic_rew_s": info['episode']['r'],
+                            f"sac/log_idx": step_idx,
+                        })
 
         real_next_obs = next_obs.copy()
         for idx, trunc in enumerate(truncations):
@@ -241,10 +248,10 @@ if __name__ == "__main__":
                 real_next_obs[idx] = infos["final_observation"][idx]
 
         sac_teacher.rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
-        sac_student.rb.add(obs, next_obs, actions, rewards, terminations, infos)
+        sac_student.rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
 
         obs = next_obs
-        obs_2 = next_obs_2
+        obs_s = next_obs_s
 
         train_sac(cfg, sac_teacher, 0)
         train_sac(cfg, sac_student, 0)
