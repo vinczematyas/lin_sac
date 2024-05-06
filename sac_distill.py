@@ -204,19 +204,28 @@ if __name__ == "__main__":
     envs = gym.vector.AsyncVectorEnv(
         [lambda: gym.wrappers.RecordEpisodeStatistics(gym.make(cfg.env_id,)) for _ in range(n_envs)]
     )
+    envs_2 = gym.vector.AsyncVectorEnv(
+        [lambda: gym.wrappers.RecordEpisodeStatistics(gym.make(cfg.env_id,)) for _ in range(n_envs)]
+    )
 
-    sac_model = setup_sac(envs, cfg)
+    sac_student = setup_sac(envs, cfg, actor_depth=0)
+    sac_teacher = setup_sac(envs, cfg, actor_depth=2)
 
     obs, _ = envs.reset(seed=cfg.seed)
+    obs_2, _ = envs_2.reset(seed=cfg.seed)
 
     for step_idx in trange(new_args["n_steps"]):
-        actions = sac_model.actor.get_action(torch.tensor(obs, dtype=torch.float32).to(cfg.device))
+        actions = sac_teacher.actor.get_action(torch.tensor(obs, dtype=torch.float32).to(cfg.device))
         actions = actions[0].cpu().detach().numpy()
 
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
 
-        if "final_info" in infos:
-            for info in infos["final_info"]:
+        actions_2 = sac_student.actor.get_action(torch.tensor(obs_2, dtype=torch.float32).to(cfg.device))
+        actions_2 = actions_2[0].cpu().detach().numpy()
+        next_obs_2, rewards_2, terminations_2, truncations_2, infos_2 = envs_2.step(actions_2)
+
+        if "final_info" in infos_2:
+            for info in infos_2["final_info"]:
                 if info:
                     if cfg.log.wandb == True:
                         wandb.log({
@@ -231,8 +240,11 @@ if __name__ == "__main__":
             if trunc:
                 real_next_obs[idx] = infos["final_observation"][idx]
 
-        sac_model.rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
+        sac_teacher.rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
+        sac_student.rb.add(obs, next_obs, actions, rewards, terminations, infos)
 
         obs = next_obs
+        obs_2 = next_obs_2
 
-        train_sac(cfg, sac_model, 0)
+        train_sac(cfg, sac_teacher, 0)
+        train_sac(cfg, sac_student, 0)
