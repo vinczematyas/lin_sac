@@ -184,6 +184,7 @@ if __name__ == "__main__":
     parser.add_argument("--log_local", action="store_true")
     parser.add_argument("--run_name", type=str, required=True)
     parser.add_argument("--n_steps", type=int, default=1e6)
+    parser.add_argument("--n_warmup_steps", type=int, default=5e3)
     parser.add_argument("--env_id", type=str, default="Hopper-v4")
     parser.add_argument("--device", type=str, default="cpu")
     parser.add_argument("--seed", type=int, default=420)
@@ -201,7 +202,7 @@ if __name__ == "__main__":
         logging.basicConfig(filename=f"{cfg.log.log_dir}/{new_args['run_name']}.log", level=logging.INFO, format="%(message)s")
 
     n_envs = 1
-    envs = gym.vector.AsyncVectorEnv(
+    envs = gym.vector.SyncVectorEnv(
         [lambda: gym.wrappers.RecordEpisodeStatistics(gym.make(cfg.env_id,)) for _ in range(n_envs)]
     )
 
@@ -210,8 +211,11 @@ if __name__ == "__main__":
     obs, _ = envs.reset(seed=cfg.seed)
 
     for step_idx in trange(new_args["n_steps"]):
-        actions = sac_model.actor.get_action(torch.tensor(obs, dtype=torch.float32).to(cfg.device))
-        actions = actions[0].cpu().detach().numpy()
+        if step_idx < int(new_args["n_warmup_steps"]):
+            actions = np.array([envs.single_action_space.sample() for _ in range(n_envs)])
+        else:
+            actions, _, _ = sac_model.actor.get_action(torch.tensor(obs, dtype=torch.float32).to(cfg.device))
+            actions = actions.detach().cpu().numpy()
 
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
 
@@ -235,4 +239,7 @@ if __name__ == "__main__":
 
         obs = next_obs
 
+        if step_idx < int(new_args["n_warmup_steps"]):
+            continue
         train_sac(cfg, sac_model, 0)
+
