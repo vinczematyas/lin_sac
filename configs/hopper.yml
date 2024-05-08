@@ -10,7 +10,6 @@ log:
   model_dir: models
 # sac args
 sac:
-  n_sacs: 3  # env action dim
   buffer_size: 1_000_000
   gamma: 0.99  # discount factor
   tau: 0.005  # target smoothing coefficient
